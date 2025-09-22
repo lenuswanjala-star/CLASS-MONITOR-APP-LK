@@ -15,7 +15,7 @@
   <div id="root"></div>
 
   <script type="text/javascript">
-    // Firebase config
+    // -------------------- Firebase Config --------------------
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
       authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -30,6 +30,7 @@
 
     const e = React.createElement;
 
+    // -------------------- React App --------------------
     function App() {
       const [user, setUser] = React.useState(null);
       const [role, setRole] = React.useState("");
@@ -38,6 +39,7 @@
       const [currentScreen, setCurrentScreen] = React.useState("dashboard");
 
       React.useEffect(() => {
+        // Auth listener
         auth.onAuthStateChanged(currentUser => {
           setUser(currentUser);
           if (currentUser) {
@@ -45,15 +47,18 @@
           } else setRole("");
         });
 
+        // Students collection listener
         db.collection("students").onSnapshot(snapshot => {
           setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
       }, []);
 
+      // Login/Logout functions
       const loginTeacher = () => auth.signInWithEmailAndPassword("teacher@example.com", "password123");
       const loginStudent = () => auth.signInWithEmailAndPassword("student@example.com", "password123");
       const logout = () => auth.signOut();
 
+      // Add student
       const addStudent = () => {
         if (!studentName) return;
         db.collection("students").add({
@@ -66,6 +71,7 @@
         setStudentName("");
       };
 
+      // Change student screen
       const changeScreen = (screenName) => {
         setCurrentScreen(screenName);
         const studentDoc = students.find(s => s.name === user.email.split("@")[0]);
@@ -77,10 +83,12 @@
         }
       };
 
+      // Lock/Unlock student
       const toggleLock = (studentId, lockState) => {
         db.collection("students").doc(studentId).update({ locked: lockState });
       };
 
+      // -------------------- Render --------------------
       if (!user) {
         return e('div', null,
           e('p', null, 'Login as:'),
