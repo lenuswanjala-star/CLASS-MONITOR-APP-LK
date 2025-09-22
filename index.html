@@ -12,9 +12,11 @@
   <script src="https://www.gstatic.com/firebasejs/10.9.3/firebase-firestore-compat.js"></script>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">Loading...</div>
 
   <script type="text/javascript">
+    const e = React.createElement;
+
     // -------------------- Firebase Config --------------------
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
@@ -24,14 +26,21 @@
       messagingSenderId: "YOUR_SENDER_ID",
       appId: "YOUR_APP_ID",
     };
-    firebase.initializeApp(firebaseConfig);
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+    } catch (error) {
+      document.getElementById("root").innerText = "Firebase initialization error: " + error;
+      throw error;
+    }
+
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    const e = React.createElement;
-
     // -------------------- React App --------------------
     function App() {
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState(null);
       const [user, setUser] = React.useState(null);
       const [role, setRole] = React.useState("");
       const [students, setStudents] = React.useState([]);
@@ -39,26 +48,34 @@
       const [currentScreen, setCurrentScreen] = React.useState("dashboard");
 
       React.useEffect(() => {
-        // Auth listener
-        auth.onAuthStateChanged(currentUser => {
-          setUser(currentUser);
-          if (currentUser) {
-            setRole(currentUser.email.includes("teacher") ? "teacher" : "student");
-          } else setRole("");
-        });
+        try {
+          const unsubscribeAuth = auth.onAuthStateChanged(currentUser => {
+            setUser(currentUser);
+            setRole(currentUser ? (currentUser.email.includes("teacher") ? "teacher" : "student") : "");
+            setLoading(false);
+          });
 
-        // Students collection listener
-        db.collection("students").onSnapshot(snapshot => {
-          setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
+          const unsubscribeStudents = db.collection("students").onSnapshot(snapshot => {
+            setStudents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          });
+
+          return () => {
+            unsubscribeAuth();
+            unsubscribeStudents();
+          };
+        } catch (err) {
+          setError(err.message);
+          setLoading(false);
+        }
       }, []);
 
-      // Login/Logout functions
-      const loginTeacher = () => auth.signInWithEmailAndPassword("teacher@example.com", "password123");
-      const loginStudent = () => auth.signInWithEmailAndPassword("student@example.com", "password123");
+      if (loading) return e('div', null, 'Loading Firebase...');
+      if (error) return e('div', { style: { color: 'red' } }, 'Error: ' + error);
+
+      const loginTeacher = () => auth.signInWithEmailAndPassword("teacher@example.com", "password123").catch(err => setError(err.message));
+      const loginStudent = () => auth.signInWithEmailAndPassword("student@example.com", "password123").catch(err => setError(err.message));
       const logout = () => auth.signOut();
 
-      // Add student
       const addStudent = () => {
         if (!studentName) return;
         db.collection("students").add({
@@ -67,11 +84,10 @@
           attendance: "Absent",
           locked: false,
           lastActive: new Date().toISOString()
-        });
+        }).catch(err => setError(err.message));
         setStudentName("");
       };
 
-      // Change student screen
       const changeScreen = (screenName) => {
         setCurrentScreen(screenName);
         const studentDoc = students.find(s => s.name === user.email.split("@")[0]);
@@ -79,21 +95,20 @@
           db.collection("students").doc(studentDoc.id).update({
             screen: screenName,
             lastActive: new Date().toISOString()
-          });
+          }).catch(err => setError(err.message));
         }
       };
 
-      // Lock/Unlock student
       const toggleLock = (studentId, lockState) => {
-        db.collection("students").doc(studentId).update({ locked: lockState });
+        db.collection("students").doc(studentId).update({ locked: lockState }).catch(err => setError(err.message));
       };
 
-      // -------------------- Render --------------------
       if (!user) {
         return e('div', null,
           e('p', null, 'Login as:'),
           e('button', { onClick: loginTeacher }, 'Teacher'),
-          e('button', { onClick: loginStudent }, 'Student')
+          e('button', { onClick: loginStudent }, 'Student'),
+          error ? e('p', { style: { color: 'red' } }, error) : null
         );
       }
 
@@ -128,7 +143,6 @@
         );
       }
 
-      // Student view
       const studentDoc = students.find(s => s.name === user.email.split("@")[0]);
       const isLocked = studentDoc?.locked || false;
 
